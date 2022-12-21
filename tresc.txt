@@ -10,7 +10,7 @@ std::string. Podstawowa jej idea jest taka, że gdy tworzymy kopię obiektu
 współdzieli ona wszystkie wewnętrzne zasoby (które mogą być przechowywane
 w oddzielnym obiekcie na stercie) z obiektem źródłowym. Taki stan trwa do
 momentu, w którym jedna z kopii musi zostać zmodyfikowana. Wtedy modyfikowany
-obiekt tworzy własną kopię owych zasobów, na których wykonuje modyfikacje.
+obiekt tworzy własną kopię nowych zasobów, na których wykonuje modyfikacje.
 
 Wzorzec ma być parametryzowany typami klucza i przechowywanej wartości,
 oznaczanymi odpowiednio przez K i V. Typ klucza K ma semantykę wartości, czyli
