@@ -25,21 +25,22 @@ private:
         return std::pair<K const &, V &> ({std::ref(p.first),  std::ref(p.second)});
     }
 
-    void make_copy(){
-
-    }
     void make_unique(){
         if(!map_list.unique()){
-            kvfifo newQ({});
+            auto original_pair_list = pair_list.get();
+            pair_list = std::make_shared<list_t>(*pair_list);
 
-            for(auto it : *pair_list ){
-                newQ.push(it.first, it.second);
+            try {
+                map_t new_map_lists;
+                for (auto it = pair_list->begin(); it != pair_list->end(); ++it) {
+                    new_map_lists[it->first].push_back(it);
+                }
+
+                map_list = std::make_shared<map_t>(new_map_lists);
+            } catch (std::exception& e) {
+                pair_list.reset(original_pair_list);
+                throw;
             }
-            
-            map_list.reset();
-            map_list.swap(newQ.map_list);
-            pair_list.reset();
-            pair_list.swap(newQ.pair_list);
         }
     }
 public:
@@ -66,7 +67,6 @@ public:
 
     // O(1) + destroying
     kvfifo& operator=(kvfifo other) {
-        //TODO: destroing
         map_list = (other.map_list);
         pair_list = (other.pair_list);
         must_be_uniqe = other.must_be_uniqe;
@@ -79,14 +79,20 @@ public:
         
         pair_list->push_back( std::make_pair(k, v));
 
-        if(!map_list->contains(k)){
-            std::list<list_ptr_t> new_l;
-            map_list->insert({k, new_l});
+        try {
+            if(!map_list->contains(k)){
+                std::list<list_ptr_t> new_l;
+                map_list->insert({k, new_l});
+            }
+            map_list->find(k)->second.push_back(
+            --pair_list->end()
+            );
+        } catch (std::exception& e) {
+            pair_list->pop_back();
+            throw;
         }
-        map_list->find(k)->second.push_back(
-           --pair_list->end()
-        );
 
+        must_be_uniqe = false;
     }
 
     void pop() {
@@ -99,17 +105,22 @@ public:
             map_list->erase(k);
         }
         pair_list->pop_front();
+        must_be_uniqe = false;
     }
     void pop(K const &k) {
         if(!map_list->contains(k)) throw std::invalid_argument("key doesn't exist");
         make_unique();
 
+
         auto first = map_list->find(k)->second.front();
+        std::cout<<"mk\n";
         pair_list->erase(first);
+        std::cout<<"mk\n";
         map_list->find(k)->second.pop_front();
         if(map_list->find(k)->second.size() == 0){
             map_list->erase(k);
         }
+        must_be_uniqe = false;
     }
 
     // O(m + log n)
@@ -120,11 +131,23 @@ public:
         std::list<list_ptr_t> to_move;
         std::swap(to_move, map_list->find(k)->second);
 
-        for(list_ptr_t ptr : to_move){
-            std::pair<K,V> cell = *ptr;
-            pair_list->erase(ptr);
-            push(cell.first, cell.second);
+        try{
+            list_t cells_to_move;
+            for(list_ptr_t ptr : to_move){
+                std::pair<K const ,V> cell = *ptr;
+                cells_to_move.push_back(cell);
+                pair_list->erase(ptr);
+            }
+            for(auto cell : cells_to_move){
+                push(cell.first, cell.second);
+            }
+
+
+        }  catch (std::exception& e) {
+            throw;
         }
+
+        must_be_uniqe = false;
         
     }
 
@@ -191,12 +214,13 @@ public:
     
 
     // O(1)
-    size_t size() const noexcept { return pair_list->size(); }
+    std::size_t size() const noexcept { return pair_list->size(); }
 
-    bool empty() const noexcept { return  pair_list== pair_list->empty(); }
+    bool empty() const noexcept { 
+        return  pair_list->empty(); }
 
     // O(log n)
-    size_t count(K const &k) {
+    std::size_t count(K const &k) const noexcept {
         if (map_list->contains(k)) return map_list->find(k)->second.size();
         return 0;
     }
