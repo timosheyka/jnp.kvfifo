@@ -113,9 +113,7 @@ public:
 
 
         auto first = map_list->find(k)->second.front();
-        std::cout<<"mk\n";
         pair_list->erase(first);
-        std::cout<<"mk\n";
         map_list->find(k)->second.pop_front();
         if(map_list->find(k)->second.size() == 0){
             map_list->erase(k);
@@ -156,14 +154,12 @@ public:
    
     std::pair<K const &, V const &> front() const {
         if(pair_list->empty()) throw std::invalid_argument("queue is empty");
-        // std::cout<<"f1\n";
 
         return pair_list->front();
     }
 
     std::pair<K const &, V &> front() {
         if(pair_list->empty()) throw std::invalid_argument("queue is empty");
-        // std::cout<<"f2\n";
         make_unique();
         must_be_uniqe = true;
 
