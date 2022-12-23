@@ -13,51 +13,187 @@
 
 template <typename K, typename V> class kvfifo {
 private:
-    using list_ptr_t = typename std::list<std::pair<K, V>>::iterator;
+    using list_t = std::list<std::pair<K const, V>>;
+    using list_ptr_t = typename list_t::iterator;
     using map_t = std::map<K, std::list<list_ptr_t>>;
-    using list_t = std::list<std::pair<K, V>>;
 
     std::shared_ptr<map_t> map_list;
     std::shared_ptr<list_t> pair_list;
+    bool must_be_uniqe = false;
 
+    std::pair<K const &, V &> make_ref(std::pair<K const , V > &p){
+        return std::pair<K const &, V &> ({std::ref(p.first),  std::ref(p.second)});
+    }
+
+    void make_copy(){
+
+    }
+    void make_unique(){
+        if(!map_list.unique()){
+            kvfifo newQ({});
+
+            for(auto it : *pair_list ){
+                newQ.push(it.first, it.second);
+            }
+            
+            map_list.reset();
+            map_list.swap(newQ.map_list);
+            pair_list.reset();
+            pair_list.swap(newQ.pair_list);
+        }
+    }
 public:
     kvfifo() :
         map_list(std::make_shared<map_t>()),
         pair_list(std::make_shared<list_t>()) {}
-    kvfifo(kvfifo const &other) :
-        map_list(other.map_list),
-        pair_list(other.pair_list) {}
-    kvfifo(kvfifo const &&other)
-    { map_list.swap(other.map_list); pair_list.swap(other.pair_list); }
+    kvfifo(kvfifo const &other) {
+            if(other.must_be_uniqe){
+                pair_list = std::make_shared<list_t>(*other.pair_list);
+
+                map_t new_map_list;
+                for (auto it = pair_list->begin(); it != pair_list->end(); ++it) {
+                    new_map_list[it->first].push_back(it);
+                }
+
+                map_list = std::make_shared<map_t>(new_map_list);
+            } else{
+                map_list = other.map_list;
+                pair_list = other.pair_list;
+            }
+        }
+    kvfifo(kvfifo &&other) noexcept : map_list(std::move(other.map_list)), pair_list(std::move(other.pair_list)),
+        must_be_uniqe(std::move(other.must_be_uniqe)) {}
 
     // O(1) + destroying
-    kvfifo& operator=(kvfifo other) {}
+    kvfifo& operator=(kvfifo other) {
+        //TODO: destroing
+        map_list = (other.map_list);
+        pair_list = (other.pair_list);
+        must_be_uniqe = other.must_be_uniqe;
+        return *this;
+    }
 
     // O(log n)
-    void push(K const &k, V const &v) {}
+    void push(K const &k, V const &v) {
+        make_unique();
+        
+        pair_list->push_back( std::make_pair(k, v));
 
-    void pop() {}
-    void pop(K const &other) {}
+        if(!map_list->contains(k)){
+            std::list<list_ptr_t> new_l;
+            map_list->insert({k, new_l});
+        }
+        map_list->find(k)->second.push_back(
+           --pair_list->end()
+        );
+
+    }
+
+    void pop() {
+        if(pair_list->empty()) throw std::invalid_argument("queue is empty");
+        make_unique();
+
+        K k = pair_list->front().first;
+        map_list->find(k)->second.pop_front();
+        if(map_list->find(k)->second.size()==0){
+            map_list->erase(k);
+        }
+        pair_list->pop_front();
+    }
+    void pop(K const &k) {
+        if(!map_list->contains(k)) throw std::invalid_argument("key doesn't exist");
+        make_unique();
+
+        auto first = map_list->find(k)->second.front();
+        pair_list->erase(first);
+        map_list->find(k)->second.pop_front();
+        if(map_list->find(k)->second.size() == 0){
+            map_list->erase(k);
+        }
+    }
 
     // O(m + log n)
-    void move_to_back(K const &k) {}
+    void move_to_back(K const &k) {
+        if(!map_list->contains(k)) throw std::invalid_argument("key doesn't exist");
+        make_unique();
+
+        std::list<list_ptr_t> to_move;
+        std::swap(to_move, map_list->find(k)->second);
+
+        for(list_ptr_t ptr : to_move){
+            std::pair<K,V> cell = *ptr;
+            pair_list->erase(ptr);
+            push(cell.first, cell.second);
+        }
+        
+    }
 
     // O(1)
-    std::pair<K const &, V &> front() {}
-    std::pair<K const &, V &> front() const {}
-    std::pair<K const &, V &> back() {}
-    std::pair<K const &, V const &> back() const {}
+    
+   
+    std::pair<K const &, V const &> front() const {
+        if(pair_list->empty()) throw std::invalid_argument("queue is empty");
+        // std::cout<<"f1\n";
+
+        return pair_list->front();
+    }
+
+    std::pair<K const &, V &> front() {
+        if(pair_list->empty()) throw std::invalid_argument("queue is empty");
+        // std::cout<<"f2\n";
+        make_unique();
+        must_be_uniqe = true;
+
+        return make_ref(pair_list->front()); 
+    }
+    
+    std::pair<K const &, V const &> back() const {
+        if(pair_list->empty()) throw std::invalid_argument("queue is empty");
+
+        return pair_list->back();
+    }
+    std::pair<K const &, V &> back() { 
+        if(pair_list->empty()) throw std::invalid_argument("queue is empty");
+        make_unique();
+        must_be_uniqe = true;
+
+        return make_ref(pair_list->back()); 
+     }
+    
 
     // O(log n)
-    std::pair<K const &, V &> first(K const &key) {}
-    std::pair<K const &, V const &> first(K const &key) const {}
-    std::pair<K const &, V &> last(K const &key) {}
-    std::pair<K const &, V const &> last(K const &key) const {}
+    std::pair<K const &, V const &> first(K const &k) const {
+        if(!map_list->contains(k)) throw std::invalid_argument("key doesn't exist");
+
+        return *map_list->find(k)->second.front();
+    }
+    std::pair<K const &, V &> first(K const &k) { 
+        if(!map_list->contains(k)) throw std::invalid_argument("key doesn't exist");
+        make_unique();
+        must_be_uniqe = true;
+
+        return make_ref(*map_list->find(k)->second.front());
+    }
+    
+    std::pair<K const &, V const &> last(K const &k) const {
+        if(!map_list->contains(k)) throw std::invalid_argument("key doesn't exist");
+
+
+        return *map_list->find(k)->second.back();
+    }
+    std::pair<K const &, V &> last(K const &k) { 
+        if(!map_list->contains(k)) throw std::invalid_argument("key doesn't exist");
+        make_unique();
+        must_be_uniqe = true;
+
+        return make_ref(*map_list->find(k)->second.back());
+    }
+    
 
     // O(1)
     size_t size() const noexcept { return pair_list->size(); }
 
-    bool empty() const noexcept { return pair_list->empty(); }
+    bool empty() const noexcept { return  pair_list== pair_list->empty(); }
 
     // O(log n)
     size_t count(K const &k) {
@@ -66,11 +202,13 @@ public:
     }
 
     // O(n)
-    void clear() noexcept { map_list->clear(); pair_list->clear(); }; // TODO: weak
-
+    void clear() noexcept { 
+        make_unique();
+        map_list->clear();pair_list->clear();
+        must_be_uniqe = false;
+    }; 
     // class Iterator
     class k_iterator {
-    private:
         typename map_t::const_iterator it;
     public:
         using iterator_category = std::bidirectional_iterator_tag;
@@ -101,8 +239,8 @@ public:
 
         k_iterator &operator=(const k_iterator &other) noexcept = default;
         bool operator==(const k_iterator &other) const noexcept
-        { return it = other.it; }
-        bool operator!=(const k_iterator &other) const noexcept
+        { return it == other.it; }
+        bool operator!=( k_iterator &other) const noexcept
         { return !this->operator==(other); }
     };
 
